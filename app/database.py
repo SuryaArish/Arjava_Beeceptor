@@ -36,3 +36,4 @@ class DynamoDBClient:
         return self.dynamodb.Table(table_name)
 
 db_client = DynamoDBClient()
+
