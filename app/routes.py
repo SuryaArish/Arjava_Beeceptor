@@ -639,3 +639,24 @@ async def activate_mock_api(project_id: str, api_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/mock_apies/{project_id}/{api_id}/activate")
+async def activate_mock_api(project_id: str, api_id: str):
+    try:
+        table = db_client.get_table("MockApi")
+        
+        response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail="Mock API not found")
+        
+        table.update_item(
+            Key={"project_id": project_id, "api_id": api_id},
+            UpdateExpression="SET is_active = :val, updated_at = :time",
+            ExpressionAttributeValues={":val": True, ":time": datetime.utcnow().isoformat()}
+        )
+        
+        return {"success": True, "data": {"message": "Record activated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
