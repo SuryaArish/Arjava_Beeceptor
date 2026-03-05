@@ -271,3 +271,128 @@ async def activate_project(user_id: str, project_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# ==================== GLOBAL VARIABLES ====================
+
+@router.get("/global-variables")
+async def get_all_global_variables():
+    try:
+        table = db_client.get_table("GlobalVariable")
+        response = table.scan(Limit=100)
+        items = decimal_to_float(response.get("Items", []))
+        return {"success": True, "data": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/global-variables/active")
+async def get_active_global_variables():
+    try:
+        table = db_client.get_table("GlobalVariable")
+        response = table.scan(FilterExpression=Attr("is_active").eq(True), Limit=100)
+        items = decimal_to_float(response.get("Items", []))
+        return {"success": True, "data": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/global-variables/{project_id}/{variable_id}")
+async def get_global_variable(project_id: str, variable_id: str):
+    try:
+        table = db_client.get_table("GlobalVariable")
+        response = table.get_item(Key={"project_id": project_id, "variable_id": variable_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail="Global variable not found")
+        return {"success": True, "data": decimal_to_float(response["Item"])}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/global-variables")
+async def create_global_variable(variable: GlobalVariableCreate):
+    try:
+        table = db_client.get_table("GlobalVariable")
+        timestamp = datetime.utcnow().isoformat()
+        
+        item = variable.model_dump(exclude={"variable_id"})
+        item["variable_id"] = str(uuid.uuid4())
+        item["created_at"] = timestamp
+        item["updated_at"] = timestamp
+        item["is_active"] = True
+        
+        table.put_item(Item=item)
+        return {"success": True, "data": item}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/global-variables/{project_id}/{variable_id}")
+async def update_global_variable(project_id: str, variable_id: str, variable: GlobalVariableUpdate):
+    try:
+        table = db_client.get_table("GlobalVariable")
+        
+        response = table.get_item(Key={"project_id": project_id, "variable_id": variable_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail="Global variable not found")
+        
+        update_data = variable.model_dump(exclude_unset=True)
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        update_expr = "SET " + ", ".join([f"#{k} = :{k}" for k in update_data.keys()])
+        expr_attr_names = {f"#{k}": k for k in update_data.keys()}
+        expr_attr_values = {f":{k}": v for k, v in update_data.items()}
+        
+        table.update_item(
+            Key={"project_id": project_id, "variable_id": variable_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=expr_attr_names,
+            ExpressionAttributeValues=expr_attr_values
+        )
+        
+        updated_response = table.get_item(Key={"project_id": project_id, "variable_id": variable_id})
+        return {"success": True, "data": decimal_to_float(updated_response["Item"])}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/global-variables/{project_id}/{variable_id}")
+async def deactivate_global_variable(project_id: str, variable_id: str):
+    try:
+        table = db_client.get_table("GlobalVariable")
+        
+        response = table.get_item(Key={"project_id": project_id, "variable_id": variable_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail=f"Global variable not found with project_id={project_id} and variable_id={variable_id}")
+        
+        table.update_item(
+            Key={"project_id": project_id, "variable_id": variable_id},
+            UpdateExpression="SET is_active = :val, updated_at = :time",
+            ExpressionAttributeValues={":val": False, ":time": datetime.utcnow().isoformat()}
+        )
+        
+        return {"success": True, "data": {"message": "Record deactivated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/global-variables/{project_id}/{variable_id}/activate")
+async def activate_global_variable(project_id: str, variable_id: str):
+    try:
+        table = db_client.get_table("GlobalVariable")
+        
+        response = table.get_item(Key={"project_id": project_id, "variable_id": variable_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail="Global variable not found")
+        
+        table.update_item(
+            Key={"project_id": project_id, "variable_id": variable_id},
+            UpdateExpression="SET is_active = :val, updated_at = :time",
+            ExpressionAttributeValues={":val": True, ":time": datetime.utcnow().isoformat()}
+        )
+        
+        return {"success": True, "data": {"message": "Record activated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
