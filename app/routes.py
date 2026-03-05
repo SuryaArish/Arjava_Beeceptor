@@ -640,6 +640,9 @@ async def activate_mock_api(project_id: str, api_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
 @router.patch("/mock_apies/{project_id}/{api_id}/activate")
 async def activate_mock_api(project_id: str, api_id: str):
     try:
