@@ -9,7 +9,6 @@ app = FastAPI(
     description="Production-ready FastAPI with AWS DynamoDB",
     version="2.0.0"
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +16,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(

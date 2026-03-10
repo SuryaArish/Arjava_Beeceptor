@@ -102,6 +102,7 @@ class MockApiCreate(BaseModel):
     expression: Dict[str, Any]
     state_condition: Dict[str, Any]
     query_header: Dict[str, Any]
+    response: Dict[str, Any]
     description: str
     is_active: bool = True
     created_by: str
@@ -120,5 +121,7 @@ class MockApiUpdate(BaseModel):
     expression: Optional[Dict[str, Any]] = None
     state_condition: Optional[Dict[str, Any]] = None
     query_header: Optional[Dict[str, Any]] = None
+    response: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
     updated_by: str
+

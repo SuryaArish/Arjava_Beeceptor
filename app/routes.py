@@ -396,3 +396,173 @@ async def activate_global_variable(project_id: str, variable_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
+# ==================== MOCK APIS ====================
+
+@router.get("/mock_apis")
+async def get_all_mock_apis():
+    try:
+        table = db_client.get_table("MockApi")
+        response = table.scan(Limit=100)
+        items = decimal_to_float(response.get("Items", []))
+        return {"success": True, "data": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/mock_apis/active")
+async def get_active_mock_apis():
+    try:
+        table = db_client.get_table("MockApi")
+        response = table.scan(FilterExpression=Attr("is_active").eq(True), Limit=100)
+        items = decimal_to_float(response.get("Items", []))
+        return {"success": True, "data": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/mock_apis/{project_id}/{api_id}")
+async def get_mock_api(project_id: str, api_id: str):
+    try:
+        table = db_client.get_table("MockApi")
+        response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
+        
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail=f"Mock API not found with project_id={project_id} and api_id={api_id}")
+        
+        item = decimal_to_float(response["Item"])
+        return {"success": True, "data": item}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/mock_apis")
+async def create_mock_api(mock_api: MockApiCreate):
+    try:
+        table = db_client.get_table("MockApi")
+        
+        api_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+        
+        item = {
+            "project_id": mock_api.project_id,
+            "api_id": api_id,
+            "method": mock_api.method,
+            "request_condition": mock_api.request_condition,
+            "expression": mock_api.expression,
+            "state_condition": mock_api.state_condition,
+            "query_header": mock_api.query_header,
+            "response": mock_api.response,
+            "description": mock_api.description,
+            "is_active": mock_api.is_active,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": mock_api.created_by,
+            "updated_by": mock_api.updated_by
+        }
+        
+        table.put_item(Item=item)
+        return {"success": True, "data": {"message": "Mock API created successfully", "api_id": api_id}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/mock_apis/{project_id}/{api_id}")
+async def update_mock_api(project_id: str, api_id: str, mock_api: MockApiUpdate):
+    try:
+        table = db_client.get_table("MockApi")
+        
+        response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail=f"Mock API not found with project_id={project_id} and api_id={api_id}")
+        
+        update_expression = "SET updated_at = :time, updated_by = :updated_by"
+        expression_values = {
+            ":time": datetime.utcnow().isoformat(),
+            ":updated_by": mock_api.updated_by
+        }
+        
+        if mock_api.method is not None:
+            update_expression += ", #method = :method"
+            expression_values[":method"] = mock_api.method
+        
+        if mock_api.request_condition is not None:
+            update_expression += ", request_condition = :request_condition"
+            expression_values[":request_condition"] = mock_api.request_condition
+        
+        if mock_api.expression is not None:
+            update_expression += ", #expression = :expression"
+            expression_values[":expression"] = mock_api.expression
+        
+        if mock_api.state_condition is not None:
+            update_expression += ", state_condition = :state_condition"
+            expression_values[":state_condition"] = mock_api.state_condition
+        
+        if mock_api.query_header is not None:
+            update_expression += ", query_header = :query_header"
+            expression_values[":query_header"] = mock_api.query_header
+        
+        if mock_api.response is not None:
+            update_expression += ", #response = :response"
+            expression_values[":response"] = mock_api.response
+        
+        if mock_api.description is not None:
+            update_expression += ", description = :description"
+            expression_values[":description"] = mock_api.description
+        
+        table.update_item(
+            Key={"project_id": project_id, "api_id": api_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+            ExpressionAttributeNames={"#method": "method", "#expression": "expression", "#response": "response"}
+        )
+        
+        return {"success": True, "data": {"message": "Mock API updated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/mock_apis/{project_id}/{api_id}")
+async def deactivate_mock_api(project_id: str, api_id: str):
+    try:
+        table = db_client.get_table("MockApi")
+        
+        response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail=f"Mock API not found with project_id={project_id} and api_id={api_id}")
+        
+        table.update_item(
+            Key={"project_id": project_id, "api_id": api_id},
+            UpdateExpression="SET is_active = :val, updated_at = :time",
+            ExpressionAttributeValues={":val": False, ":time": datetime.utcnow().isoformat()}
+        )
+        
+        return {"success": True, "data": {"message": "Mock API deactivated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/mock_apis/{project_id}/{api_id}/activate")
+async def activate_mock_api(project_id: str, api_id: str):
+    try:
+        table = db_client.get_table("MockApi")
+        
+        response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
+        if "Item" not in response:
+            raise HTTPException(status_code=404, detail="Mock API not found")
+        
+        table.update_item(
+            Key={"project_id": project_id, "api_id": api_id},
+            UpdateExpression="SET is_active = :val, updated_at = :time",
+            ExpressionAttributeValues={":val": True, ":time": datetime.utcnow().isoformat()}
+        )
+        
+        return {"success": True, "data": {"message": "Mock API activated successfully"}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
