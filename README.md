@@ -9,7 +9,7 @@ pip install -r requirements.txt
 ## 2. Configure AWS Credentials
 Edit `.env` file with your actual AWS credentials:
 ```
-AWS_ACCESS_KEY_ID=your_actual_access_key
+AWS_ACCESS_KEY_ID=your_actual_access_key 
 AWS_SECRET_ACCESS_KEY=your_actual_secret_key
 AWS_REGION=eu-north-1
 ```
