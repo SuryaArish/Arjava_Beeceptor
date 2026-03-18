@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 class UserCreate(BaseModel):
     userId: Optional[str] = None
@@ -11,7 +11,7 @@ class UserCreate(BaseModel):
     is_active: bool = True
     created_by: str
     updated_by: str
-    
+
     @field_validator('userId')
     @classmethod
     def reject_user_id(cls, v):
@@ -29,7 +29,6 @@ class UserUpdate(BaseModel):
     updated_by: str
 
 class ProjectCreate(BaseModel):
-    user_id: str
     project_id: Optional[str] = None
     project_name: str
     visibility: str
@@ -37,7 +36,7 @@ class ProjectCreate(BaseModel):
     is_active: bool = True
     created_by: str
     updated_by: str
-    
+
     @field_validator('project_id')
     @classmethod
     def reject_project_id(cls, v):
@@ -51,24 +50,16 @@ class ProjectUpdate(BaseModel):
     environment_type: Optional[str] = None
     updated_by: str
 
-class GlobalVariableCreate(BaseModel):
+class EnvironmentVariableCreate(BaseModel):
     project_id: str
-    variable_id: Optional[str] = None
-    variable_name: str
-    environment_names: Dict[str, Any]
+    environment_name: str
+    environment_values: Dict[str, Any]
     created_by: str
     updated_by: str
-    
-    @field_validator('variable_id')
-    @classmethod
-    def reject_variable_id(cls, v):
-        if v is not None:
-            raise ValueError("Primary key is auto-generated. Do not provide it.")
-        return v
 
-class GlobalVariableUpdate(BaseModel):
-    variable_name: Optional[str] = None
-    environment_names: Optional[Dict[str, Any]] = None
+class EnvironmentVariableUpdate(BaseModel):
+    environment_name: Optional[str] = None
+    environment_values: Optional[Dict[str, Any]] = None
     updated_by: str
 
 class ResponseCreate(BaseModel):
@@ -79,7 +70,7 @@ class ResponseCreate(BaseModel):
     status: str
     response_header: Dict[str, Any]
     response_body: Dict[str, Any]
-    
+
     @field_validator('response_id')
     @classmethod
     def reject_response_id(cls, v):
@@ -96,7 +87,7 @@ class ResponseUpdate(BaseModel):
 
 class MockApiCreate(BaseModel):
     project_id: str
-    api_id: Optional[str] = None
+    env_id: str
     method: str
     request_condition: Dict[str, Any]
     expression: Dict[str, Any]
@@ -107,15 +98,12 @@ class MockApiCreate(BaseModel):
     is_active: bool = True
     created_by: str
     updated_by: str
-    
-    @field_validator('api_id')
-    @classmethod
-    def reject_api_id(cls, v):
-        if v is not None:
-            raise ValueError("Primary key is auto-generated. Do not provide it.")
-        return v
+
+class MockApiBulkImport(BaseModel):
+    items: List[MockApiCreate]
 
 class MockApiUpdate(BaseModel):
+    env_id: Optional[str] = None
     method: Optional[str] = None
     request_condition: Optional[Dict[str, Any]] = None
     expression: Optional[Dict[str, Any]] = None
@@ -123,5 +111,5 @@ class MockApiUpdate(BaseModel):
     query_header: Optional[Dict[str, Any]] = None
     response: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
+    is_active: Optional[bool] = None
     updated_by: str
-

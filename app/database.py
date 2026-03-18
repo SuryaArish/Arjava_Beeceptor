@@ -11,7 +11,7 @@ class DynamoDBClient:
     def __init__(self):
         self.aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         self.aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        self.aws_region = os.getenv("AWS_REGION", "eu-north-1")
+        self.aws_region = os.getenv("AWS_REGION", "ap-south-1")
         
         if not self.aws_access_key or not self.aws_secret_key:
             raise ValueError("AWS credentials not found in environment variables")
