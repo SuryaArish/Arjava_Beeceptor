@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
-from database import db_client
+from app.database import db_client
 from boto3.dynamodb.conditions import Attr
 from auth import verify_token
 from models import (
