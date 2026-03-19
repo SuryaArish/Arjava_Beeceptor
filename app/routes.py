@@ -4,8 +4,8 @@ from decimal import Decimal
 import uuid
 from app.database import db_client
 from boto3.dynamodb.conditions import Attr
-from auth import verify_token
-from models import (
+from app.auth import verify_token
+from app.models import (
     UserCreate, UserUpdate,
     ProjectCreate, ProjectUpdate,
     EnvironmentVariableCreate, EnvironmentVariableUpdate,

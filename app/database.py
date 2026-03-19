@@ -3,7 +3,7 @@ import boto3
 from dotenv import load_dotenv
 import logging
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
 logger = logging.getLogger(__name__)
 
