@@ -102,6 +102,17 @@ class MockApiCreate(BaseModel):
 class MockApiBulkImport(BaseModel):
     items: List[MockApiCreate]
 
+class FailedRecord(BaseModel):
+    index: int
+    reason: str
+    data: Optional[Dict[str, Any]] = None
+
+class BulkImportResponse(BaseModel):
+    total: int
+    successful: int
+    failed: int
+    failed_records: List[FailedRecord]
+
 class MockApiUpdate(BaseModel):
     env_id: Optional[str] = None
     method: Optional[str] = None

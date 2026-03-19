@@ -21,9 +21,11 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    details = [{"field": " -> ".join(str(l) for l in e["loc"]), "message": e["msg"]} for e in errors]
     return JSONResponse(
         status_code=422,
-        content={"success": False, "message": str(exc.errors()[0]["msg"])}
+        content={"success": False, "message": "Validation failed", "errors": details}
     )
 
 app.include_router(router)

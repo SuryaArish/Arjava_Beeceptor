@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from fastapi.responses import Response
 from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
@@ -10,7 +11,12 @@ from app.models import (
     ProjectCreate, ProjectUpdate,
     EnvironmentVariableCreate, EnvironmentVariableUpdate,
     ResponseCreate, ResponseUpdate,
-    MockApiCreate, MockApiUpdate, MockApiBulkImport
+    MockApiCreate, MockApiUpdate, MockApiBulkImport,
+    BulkImportResponse, FailedRecord,
+)
+from app.export_import_service import (
+    export_json, export_csv, export_pdf,
+    parse_import_file, validate_and_build_items,
 )
 
 router = APIRouter(dependencies=[Depends(verify_token)])
@@ -312,55 +318,149 @@ async def delete_mock_api(api_id: str, project_id: str, user_id: str = Depends(v
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/mock_apis/bulk_import")
-async def bulk_import_mock_apis(payload: MockApiBulkImport, user_id: str = Depends(verify_token)):
-    table = get_db_client().get_table("mock_api")
-    now = datetime.now(timezone.utc).isoformat()
-    successful, failed = 0, 0
+# @router.post("/mock_apis/bulk_import")
+# async def bulk_import_mock_apis(payload: MockApiBulkImport, user_id: str = Depends(verify_token)):
+#     table = get_db_client().get_table("mock_api")
+#     now = datetime.now(timezone.utc).isoformat()
+#     successful, failed = 0, 0
 
-    # DynamoDB batch_write_item supports max 25 items per batch
-    items = []
-    for mock_api in payload.items:
-        items.append({
-            "project_id": mock_api.project_id,
-            "api_id": str(uuid.uuid4()),
-            "env_id": mock_api.env_id,
-            "method": mock_api.method,
-            "request_condition": mock_api.request_condition,
-            "expression": mock_api.expression,
-            "state_condition": mock_api.state_condition,
-            "query_header": mock_api.query_header,
-            "response": mock_api.response,
-            "description": mock_api.description,
-            "is_active": mock_api.is_active,
-            "created_at": now,
-            "updated_at": now,
-            "created_by": mock_api.created_by,
-            "updated_by": mock_api.updated_by,
-        })
+#     # DynamoDB batch_write_item supports max 25 items per batch
+#     items = []
+#     for mock_api in payload.items:
+#         items.append({
+#             "project_id": mock_api.project_id,
+#             "api_id": str(uuid.uuid4()),
+#             "env_id": mock_api.env_id,
+#             "method": mock_api.method,
+#             "request_condition": mock_api.request_condition,
+#             "expression": mock_api.expression,
+#             "state_condition": mock_api.state_condition,
+#             "query_header": mock_api.query_header,
+#             "response": mock_api.response,
+#             "description": mock_api.description,
+#             "is_active": mock_api.is_active,
+#             "created_at": now,
+#             "updated_at": now,
+#             "created_by": mock_api.created_by,
+#             "updated_by": mock_api.updated_by,
+#         })
 
-    # Process in chunks of 25 (DynamoDB batch limit)
-    for i in range(0, len(items), 25):
-        chunk = items[i:i + 25]
-        try:
-            response = get_db_client().dynamodb.batch_write_item(
-                RequestItems={
-                    "mock_api": [{"PutRequest": {"Item": item}} for item in chunk]
-                }
-            )
-            # Handle unprocessed items
-            unprocessed = response.get("UnprocessedItems", {}).get("mock_api", [])
-            successful += len(chunk) - len(unprocessed)
-            failed += len(unprocessed)
-        except Exception:
-            failed += len(chunk)
+#     # Process in chunks of 25 (DynamoDB batch limit)
+#     for i in range(0, len(items), 25):
+#         chunk = items[i:i + 25]
+#         try:
+#             response = get_db_client().dynamodb.batch_write_item(
+#                 RequestItems={
+#                     "mock_api": [{"PutRequest": {"Item": item}} for item in chunk]
+#                 }
+#             )
+#             # Handle unprocessed items
+#             unprocessed = response.get("UnprocessedItems", {}).get("mock_api", [])
+#             successful += len(chunk) - len(unprocessed)
+#             failed += len(unprocessed)
+#         except Exception:
+#             failed += len(chunk)
 
-    return {
-        "status": "success",
-        "message": "Bulk import completed",
-        "total_records": len(items),
-        "successful_imports": successful,
-        "failed_imports": failed,
-    }
+#     return {
+#         "status": "success",
+#         "message": "Bulk import completed",
+#         "total_records": len(items),
+#         "successful_imports": successful,
+#         "failed_imports": failed,
+#     }
 
 # ==================== Additional APIS ====================
+
+
+# ── Bulk Export ───────────────────────────────────────────────────────────────
+
+@router.get("/mock_apis/export/{project_id}")
+async def export_mock_apis(
+    project_id: str,
+    format: str = Query("json", pattern="^(json|csv|pdf)$"),
+    user_id: str = Depends(verify_token),
+):
+    """Export all Mock APIs for a project as JSON, CSV, or PDF."""
+    try:
+        table = get_db_client().get_table("mock_api")
+        response = table.scan(FilterExpression=Attr("project_id").eq(project_id))
+        items = response.get("Items", [])
+
+        # Paginate through all results
+        while "LastEvaluatedKey" in response:
+            response = table.scan(
+                FilterExpression=Attr("project_id").eq(project_id),
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
+            items.extend(response.get("Items", []))
+
+        if not items:
+            raise HTTPException(status_code=404, detail="No APIs found for this project")
+
+        # Convert Decimal → float for serialization
+        items = decimal_to_float(items)
+
+        if format == "json":
+            return Response(
+                content=export_json(items),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename={project_id}_apis.json"},
+            )
+        if format == "csv":
+            return Response(
+                content=export_csv(items),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename={project_id}_apis.csv"},
+            )
+        # pdf
+        return Response(
+            content=export_pdf(items, project_id),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={project_id}_apis.pdf"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Enhanced Bulk Import ──────────────────────────────────────────────────────
+
+@router.post("/mock_apis/bulk_import", response_model=BulkImportResponse)
+async def bulk_import_mock_apis_v2(
+    payload: list[MockApiCreate],
+    user_id: str = Depends(verify_token),
+):
+    """Bulk import Mock APIs from a JSON array with per-record validation."""
+    now = datetime.now(timezone.utc).isoformat()
+    valid_items, failed_records = validate_and_build_items(
+        [r.model_dump() for r in payload], now
+    )
+
+    successful = 0
+    if valid_items:
+        dynamodb = get_db_client().dynamodb
+        for i in range(0, len(valid_items), 25):
+            chunk = valid_items[i:i + 25]
+            try:
+                resp = dynamodb.batch_write_item(
+                    RequestItems={
+                        "mock_api": [{"PutRequest": {"Item": item}} for item in chunk]
+                    }
+                )
+                unprocessed = resp.get("UnprocessedItems", {}).get("mock_api", [])
+                successful += len(chunk) - len(unprocessed)
+                for up in unprocessed:
+                    failed_records.append(
+                        FailedRecord(index=-1, reason="DynamoDB unprocessed", data=up)
+                    )
+            except Exception as e:
+                for item in chunk:
+                    failed_records.append(FailedRecord(index=-1, reason=str(e), data=item))
+
+    return BulkImportResponse(
+        total=len(payload),
+        successful=successful,
+        failed=len(failed_records),
+        failed_records=failed_records,
+    )
