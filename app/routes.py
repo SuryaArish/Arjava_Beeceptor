@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
-from app.database import db_client
+from app.database import get_db_client
 from boto3.dynamodb.conditions import Attr
 from app.auth import verify_token
 from app.models import (
@@ -29,11 +29,11 @@ def decimal_to_float(obj):
 @router.get("/projects")
 async def get_all_projects(user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("projects")
+        table = get_db_client().get_table("projects")
         response = table.scan(FilterExpression=Attr("user_id").eq(user_id))
         items = decimal_to_float(response.get("Items", []))
 
-        mock_api_table = db_client.get_table("mock_api")
+        mock_api_table = get_db_client().get_table("mock_api")
         for item in items:
             api_response = mock_api_table.scan(FilterExpression=Attr("project_id").eq(str(item["project_id"]).strip()))
             item["api_count"] = len(api_response.get("Items", []))
@@ -45,7 +45,7 @@ async def get_all_projects(user_id: str = Depends(verify_token)):
 @router.get("/projects/{project_id}")
 async def get_project(project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("projects")
+        table = get_db_client().get_table("projects")
         response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -58,7 +58,7 @@ async def get_project(project_id: str, user_id: str = Depends(verify_token)):
 @router.post("/projects")
 async def create_project(project: ProjectCreate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("projects")
+        table = get_db_client().get_table("projects")
         timestamp = datetime.now(timezone.utc).isoformat()
 
         item = project.model_dump(exclude={"project_id"})
@@ -76,7 +76,7 @@ async def create_project(project: ProjectCreate, user_id: str = Depends(verify_t
 @router.put("/projects/{project_id}")
 async def update_project(project_id: str, project: ProjectUpdate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("projects")
+        table = get_db_client().get_table("projects")
 
         response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
         if "Item" not in response or not response["Item"].get("is_active", False):
@@ -106,7 +106,7 @@ async def update_project(project_id: str, project: ProjectUpdate, user_id: str =
 @router.delete("/projects/{project_id}")
 async def delete_project(project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("projects")
+        table = get_db_client().get_table("projects")
         response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -122,7 +122,7 @@ async def delete_project(project_id: str, user_id: str = Depends(verify_token)):
 @router.get("/environment_variables")
 async def get_all_environment_variables(project_id: str, env_id: str = None, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("environment_variable")
+        table = get_db_client().get_table("environment_variable")
         filter_expr = Attr("project_id").eq(project_id)
         if env_id:
             filter_expr = filter_expr & Attr("env_id").eq(env_id)
@@ -134,7 +134,7 @@ async def get_all_environment_variables(project_id: str, env_id: str = None, use
 @router.get("/environment_variables/{env_id}")
 async def get_environment_variable(env_id: str, project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("environment_variable")
+        table = get_db_client().get_table("environment_variable")
         response = table.get_item(Key={"project_id": project_id, "env_id": env_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Environment variable not found")
@@ -147,7 +147,7 @@ async def get_environment_variable(env_id: str, project_id: str, user_id: str = 
 @router.post("/environment_variables")
 async def create_environment_variable(variable: EnvironmentVariableCreate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("environment_variable")
+        table = get_db_client().get_table("environment_variable")
         now = datetime.now(timezone.utc).isoformat()
         item = {
             "project_id": variable.project_id,
@@ -167,7 +167,7 @@ async def create_environment_variable(variable: EnvironmentVariableCreate, user_
 @router.put("/environment_variables/{env_id}")
 async def update_environment_variable(env_id: str, project_id: str, variable: EnvironmentVariableUpdate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("environment_variable")
+        table = get_db_client().get_table("environment_variable")
         response = table.get_item(Key={"project_id": project_id, "env_id": env_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Environment variable not found")
@@ -192,7 +192,7 @@ async def update_environment_variable(env_id: str, project_id: str, variable: En
 @router.delete("/environment_variables/{env_id}")
 async def delete_environment_variable(env_id: str, project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("environment_variable")
+        table = get_db_client().get_table("environment_variable")
         response = table.get_item(Key={"project_id": project_id, "env_id": env_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Environment variable not found")
@@ -208,7 +208,7 @@ async def delete_environment_variable(env_id: str, project_id: str, user_id: str
 @router.get("/mock_apis")
 async def get_all_mock_apis(project_id: str, env_id: str = None, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("mock_api")
+        table = get_db_client().get_table("mock_api")
         filter_expr = Attr("project_id").eq(project_id)
         if env_id:
             filter_expr = filter_expr & Attr("env_id").eq(env_id)
@@ -220,7 +220,7 @@ async def get_all_mock_apis(project_id: str, env_id: str = None, user_id: str = 
 @router.get("/mock_apis/{api_id}")
 async def get_mock_api(api_id: str, project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("mock_api")
+        table = get_db_client().get_table("mock_api")
         response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Mock API not found")
@@ -233,7 +233,7 @@ async def get_mock_api(api_id: str, project_id: str, user_id: str = Depends(veri
 @router.post("/mock_apis")
 async def create_mock_api(mock_api: MockApiCreate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("mock_api")
+        table = get_db_client().get_table("mock_api")
         now = datetime.now(timezone.utc).isoformat()
         item = {
             "project_id": mock_api.project_id,
@@ -260,7 +260,7 @@ async def create_mock_api(mock_api: MockApiCreate, user_id: str = Depends(verify
 @router.put("/mock_apis/{api_id}")
 async def update_mock_api(api_id: str, project_id: str, mock_api: MockApiUpdate, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("mock_api")
+        table = get_db_client().get_table("mock_api")
         response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Mock API not found")
@@ -301,7 +301,7 @@ async def update_mock_api(api_id: str, project_id: str, mock_api: MockApiUpdate,
 @router.delete("/mock_apis/{api_id}")
 async def delete_mock_api(api_id: str, project_id: str, user_id: str = Depends(verify_token)):
     try:
-        table = db_client.get_table("mock_api")
+        table = get_db_client().get_table("mock_api")
         response = table.get_item(Key={"project_id": project_id, "api_id": api_id})
         if "Item" not in response:
             raise HTTPException(status_code=404, detail="Mock API not found")
@@ -314,7 +314,7 @@ async def delete_mock_api(api_id: str, project_id: str, user_id: str = Depends(v
 
 @router.post("/mock_apis/bulk_import")
 async def bulk_import_mock_apis(payload: MockApiBulkImport, user_id: str = Depends(verify_token)):
-    table = db_client.get_table("mock_api")
+    table = get_db_client().get_table("mock_api")
     now = datetime.now(timezone.utc).isoformat()
     successful, failed = 0, 0
 
@@ -343,7 +343,7 @@ async def bulk_import_mock_apis(payload: MockApiBulkImport, user_id: str = Depen
     for i in range(0, len(items), 25):
         chunk = items[i:i + 25]
         try:
-            response = db_client.dynamodb.batch_write_item(
+            response = get_db_client().dynamodb.batch_write_item(
                 RequestItems={
                     "mock_api": [{"PutRequest": {"Item": item}} for item in chunk]
                 }
