@@ -33,33 +33,27 @@ def decimal_to_float(obj):
 # ==================== PROJECTS ====================
 
 @router.get("/projects")
-async def get_all_projects(user_id: str = Depends(verify_token)):
+async def get_projects(user_id: str = Depends(verify_token), project_id: str = None):
     try:
         table = get_db_client().get_table("projects")
+        if project_id:
+            response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
+            if "Item" not in response:
+                raise HTTPException(status_code=404, detail="Project not found")
+            return {"success": True, "data": decimal_to_float(response["Item"])}
+
         response = table.scan(FilterExpression=Attr("user_id").eq(user_id))
         items = decimal_to_float(response.get("Items", []))
-
         mock_api_table = get_db_client().get_table("mock_api")
         for item in items:
             api_response = mock_api_table.scan(FilterExpression=Attr("project_id").eq(str(item["project_id"]).strip()))
             item["api_count"] = len(api_response.get("Items", []))
-
         return {"success": True, "data": items}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/projects/{project_id}")
-async def get_project(project_id: str, user_id: str = Depends(verify_token)):
-    try:
-        table = get_db_client().get_table("projects")
-        response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
-        if "Item" not in response:
-            raise HTTPException(status_code=404, detail="Project not found")
-        return {"success": True, "data": decimal_to_float(response["Item"])}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/projects")
 async def create_project(project: ProjectCreate, user_id: str = Depends(verify_token)):
