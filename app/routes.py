@@ -54,7 +54,6 @@ async def get_projects(user_id: str = Depends(verify_token), project_id: str = N
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/projects")
 async def create_project(project: ProjectCreate, user_id: str = Depends(verify_token)):
     try:
@@ -73,8 +72,8 @@ async def create_project(project: ProjectCreate, user_id: str = Depends(verify_t
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/projects/{project_id}")
-async def update_project(project_id: str, project: ProjectUpdate, user_id: str = Depends(verify_token)):
+@router.put("/projects")
+async def update_project(project: ProjectUpdate, project_id: str = Query(...), user_id: str = Depends(verify_token)):
     try:
         table = get_db_client().get_table("projects")
 
@@ -103,8 +102,8 @@ async def update_project(project_id: str, project: ProjectUpdate, user_id: str =
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, user_id: str = Depends(verify_token)):
+@router.delete("/projects")
+async def delete_project(project_id: str = Query(...), user_id: str = Depends(verify_token)):
     try:
         table = get_db_client().get_table("projects")
         response = table.get_item(Key={"user_id": user_id, "project_id": project_id})
