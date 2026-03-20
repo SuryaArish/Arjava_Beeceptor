@@ -32,7 +32,6 @@ class ProjectCreate(BaseModel):
     project_id: Optional[str] = None
     project_name: str
     visibility: str
-    environment_type: str
     is_active: bool = True
     created_by: str
     updated_by: str
@@ -47,7 +46,6 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     project_name: Optional[str] = None
     visibility: Optional[str] = None
-    environment_type: Optional[str] = None
     updated_by: str
 
 class EnvironmentVariableCreate(BaseModel):
