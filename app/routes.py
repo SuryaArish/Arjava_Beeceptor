@@ -69,6 +69,20 @@ async def create_project(project: ProjectCreate, user_id: str = Depends(verify_t
         item["is_active"] = True
 
         table.put_item(Item=item)
+
+        # Auto-create default environment for the new project
+        env_table = get_db_client().get_table("environment_variable")
+        env_table.put_item(Item={
+            "project_id": item["project_id"],
+            "env_id": str(uuid.uuid4()),
+            "environment_name": "default",
+            "environment_values": {},
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "created_by": "system",
+            "updated_by": "system",
+        })
+
         return {"success": True, "data": item}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
