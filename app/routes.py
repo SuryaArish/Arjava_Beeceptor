@@ -20,6 +20,7 @@ from app.export_import_service import (
 )
 
 router = APIRouter(dependencies=[Depends(verify_token)])
+public_router = APIRouter()
 
 def decimal_to_float(obj):
     if isinstance(obj, Decimal):
@@ -416,7 +417,6 @@ async def export_mock_apis(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ── Enhanced Bulk Import ──────────────────────────────────────────────────────
 
 @router.post("/mock_apis/bulk_import", response_model=BulkImportResponse)
@@ -457,3 +457,39 @@ async def bulk_import_mock_apis_v2(
         failed=len(failed_records),
         failed_records=failed_records,
     )
+
+
+# ==================== PUBLIC MOCK API RESPONSE ====================
+
+@public_router.get("/mock-api-response")
+async def get_mock_api_response(
+    project_id: str = Query(...),
+    endpoint: str = Query(...),
+):
+    """
+    Returns the Response_Body of the first matching mock API record.
+
+    Matches on project_id and endpoint (checked against expression values).
+    No authentication required — this is a public endpoint.
+    """
+    try:
+        table = get_db_client().get_table("mock_api")
+        response = table.scan(
+            FilterExpression=Attr("project_id").eq(project_id)
+        )
+        items = response.get("Items", [])
+
+        for item in items:
+            expression: dict = item.get("expression", {})
+            if endpoint in expression.values():
+                responses: dict = item.get("response", {})
+                if not responses:
+                    raise HTTPException(status_code=404, detail="API not found")
+                first_response = next(iter(responses.values()))
+                return decimal_to_float(first_response.get("Response_Body", {}))
+
+        raise HTTPException(status_code=404, detail="API not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

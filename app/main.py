@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from app.routes import router
+from app.routes import router, public_router
 
 app = FastAPI(
     title="DynamoDB REST API",
@@ -29,6 +29,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 app.include_router(router)
+app.include_router(public_router)
 
 @app.get("/")
 async def root():
