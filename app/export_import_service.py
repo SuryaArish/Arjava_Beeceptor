@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import pdfplumber
@@ -147,6 +148,17 @@ def parse_import_file(content: bytes, content_type: str, filename: str = "") -> 
     )
 
 
+def _floats_to_decimal(obj: Any) -> Any:
+    """Recursively convert float values to Decimal for DynamoDB compatibility."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _floats_to_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_floats_to_decimal(v) for v in obj]
+    return obj
+
+
 def validate_and_build_items(
     raw_records: list[dict],
     now: str,
@@ -157,7 +169,7 @@ def validate_and_build_items(
     for i, record in enumerate(raw_records):
         try:
             api = MockApiCreate(**record)
-            item = api.model_dump()
+            item = _floats_to_decimal(api.model_dump())
             item["api_id"] = str(uuid.uuid4())
             item["created_at"] = now
             item["updated_at"] = now
