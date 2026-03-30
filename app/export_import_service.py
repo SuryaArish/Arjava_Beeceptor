@@ -40,40 +40,93 @@ def export_csv(items: list[dict]) -> bytes:
     return buf.getvalue().encode()
 
 
-def export_pdf(items: list[dict], project_id: str) -> bytes:
+def export_pdf(items: list[dict], project_name: str) -> bytes:
     """
-    Export as PDF. Each row contains all required import fields.
+    Export as PDF with a structured table.
+    Columns: Project Name, Endpoint Name, Method, Description,
+             Request Condition, State Condition, Query & Headers,
+             Response Headers, Response Body.
     Dict/list fields are JSON-serialised so they survive text extraction on import.
     """
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=15, rightMargin=15,
-                            topMargin=20, bottomMargin=20)
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=20, rightMargin=20, topMargin=25, bottomMargin=20,
+    )
     styles = getSampleStyleSheet()
-    elements = [Paragraph(f"Mock APIs — Project: {project_id}", styles["Title"])]
 
-    header = _EXPORT_FIELDS
-    rows = [header]
+    # ── Title ──────────────────────────────────────────────────────────────
+    title = Paragraph(f"Mock API – {project_name}", styles["Title"])
+
+    # ── Cell styles ────────────────────────────────────────────────────────
+    cell_style = styles["Normal"].clone("cell")
+    cell_style.fontSize = 7
+    cell_style.leading = 9
+
+    header_style = styles["Normal"].clone("hdr")
+    header_style.fontSize = 7
+    header_style.leading = 9
+    header_style.textColor = colors.white
+    header_style.fontName = "Helvetica-Bold"
+
+    # ── Column definitions: (label, item_key, width_pt) ───────────────────
+    _COLUMNS = [
+        ("Project Name",      "project_id",        60),
+        ("Endpoint Name",     "expression",        80),
+        ("Method",            "method",            38),
+        ("Description",       "description",       80),
+        ("Request Condition", "request_condition", 80),
+        ("State Condition",   "state_condition",   70),
+        ("Query & Headers",   "query_header",      80),
+        ("Response Headers",  "response",          80),   # response.response_header
+        ("Response Body",     "response",          90),   # response.response_body
+    ]
+
+    def _cell(val: Any) -> Paragraph:
+        text = json.dumps(val, indent=None) if isinstance(val, (dict, list)) else str(val)
+        # Escape XML special chars so ReportLab Paragraph doesn't choke on JSON
+        text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(text, cell_style)
+
+    def _hdr(label: str) -> Paragraph:
+        return Paragraph(label, header_style)
+
+    # ── Build rows ─────────────────────────────────────────────────────────
+    header_row = [_hdr(col[0]) for col in _COLUMNS]
+    col_widths = [col[2] for col in _COLUMNS]
+
+    data_rows: list[list] = [header_row]
     for item in items:
-        row = []
-        for f in _EXPORT_FIELDS:
-            val = item.get(f, "")
-            row.append(json.dumps(val) if isinstance(val, (dict, list)) else str(val))
-        rows.append(row)
+        response_dict = item.get("response", {})
+        resp_headers = response_dict.get("response_header", response_dict) if isinstance(response_dict, dict) else response_dict
+        resp_body    = response_dict.get("response_body",   response_dict) if isinstance(response_dict, dict) else response_dict
 
-    col_widths = [60, 60, 40, 80, 40, 60, 60, 80, 80, 80, 80, 80]
-    t = Table(rows, colWidths=col_widths, repeatRows=1)
+        data_rows.append([
+            _cell(project_name),  # Project Name column shows the resolved name
+            _cell(item.get("expression", "")),
+            _cell(item.get("method", "")),
+            _cell(item.get("description", "")),
+            _cell(item.get("request_condition", "")),
+            _cell(item.get("state_condition", "")),
+            _cell(item.get("query_header", "")),
+            _cell(resp_headers),
+            _cell(resp_body),
+        ])
+
+    # ── Table styling ──────────────────────────────────────────────────────
+    t = Table(data_rows, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, 0),  colors.HexColor("#2d3748")),
-        ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
-        ("FONTSIZE",      (0, 0), (-1, -1), 6),
-        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ("GRID",          (0, 0), (-1, -1), 0.3, colors.grey),
-        ("PADDING",       (0, 0), (-1, -1), 3),
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("WORDWRAP",      (0, 0), (-1, -1), True),
+        ("BACKGROUND",     (0, 0), (-1, 0),  colors.HexColor("#2d3748")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4f8")]),
+        ("GRID",           (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e0")),
+        ("TOPPADDING",     (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",    (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING",   (0, 0), (-1, -1), 4),
+        ("VALIGN",         (0, 0), (-1, -1), "TOP"),
     ]))
-    elements.append(t)
-    doc.build(elements)
+
+    doc.build([title, t])
     return buf.getvalue()
 
 

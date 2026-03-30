@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query, Request
 from fastapi.responses import Response
 from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
+import random
+import asyncio
 from app.database import get_db_client
 from boto3.dynamodb.conditions import Attr
 from app.auth import verify_token
@@ -408,6 +410,14 @@ async def export_mock_apis(
         # Convert Decimal → float for serialization
         items = decimal_to_float(items)
 
+        # Fetch project name for PDF title
+        project_name = project_id
+        if format == "pdf":
+            proj_resp = get_db_client().get_table("projects").get_item(
+                Key={"user_id": user_id, "project_id": project_id}
+            )
+            project_name = proj_resp.get("Item", {}).get("project_name", project_id)
+
         if format == "json":
             return Response(
                 content=export_json(items),
@@ -422,7 +432,7 @@ async def export_mock_apis(
             )
         # pdf
         return Response(
-            content=export_pdf(items, project_id),
+            content=export_pdf(items, project_name),
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={project_id}_apis.pdf"},
         )
@@ -477,6 +487,7 @@ async def bulk_import_mock_apis_v2(
 
 @public_router.get("/mock-api-response")
 async def get_mock_api_response(
+    request: Request,
     project_id: str = Query(...),
     endpoint: str = Query(...),
 ):
@@ -496,11 +507,25 @@ async def get_mock_api_response(
         for item in items:
             expression: dict = item.get("expression", {})
             if endpoint in expression.values():
+                # HTTP method validation
+                configured_method = item.get("method", "").upper()
+                if configured_method and request.method.upper() != configured_method:
+                    raise HTTPException(status_code=405, detail=f"Method Not Allowed. Expected {configured_method}.")
+
                 responses: dict = item.get("response", {})
                 if not responses:
                     raise HTTPException(status_code=404, detail="API not found")
-                first_response = next(iter(responses.values()))
-                return decimal_to_float(first_response.get("Response_Body", {}))
+
+                # Single vs weighted random response
+                response_values = list(responses.values())
+                selected = response_values[0] if len(response_values) == 1 else random.choice(response_values)
+
+                # Response delay
+                delay = selected.get("Response_delay", 0)
+                if delay:
+                    await asyncio.sleep(int(delay))
+
+                return decimal_to_float(selected.get("Response_Body", {}))
 
         raise HTTPException(status_code=404, detail="API not found")
     except HTTPException:
