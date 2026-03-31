@@ -5,6 +5,7 @@ from decimal import Decimal
 import uuid
 import random
 import asyncio
+import ast
 from app.database import get_db_client
 from boto3.dynamodb.conditions import Attr
 from app.auth import verify_token
@@ -485,7 +486,6 @@ async def bulk_import_mock_apis_v2(
 
 # ==================== PUBLIC MOCK API RESPONSE ====================
 
-@public_router.get("/mock-api-response")
 async def get_mock_api_response(
     request: Request,
     project_id: str = Query(...),
@@ -520,15 +520,40 @@ async def get_mock_api_response(
                 response_values = list(responses.values())
                 selected = response_values[0] if len(response_values) == 1 else random.choice(response_values)
 
-                # Response delay
+                # Response delay — value is in seconds
                 delay = selected.get("Response_delay", 0)
                 if delay:
-                    await asyncio.sleep(int(delay))
+                    await asyncio.sleep(float(delay))
 
-                return decimal_to_float(selected.get("Response_Body", {}))
+                body = decimal_to_float(selected.get("Response_Body", {}))
+
+                # Dynamic variable replacement
+                if selected.get("IsDynamic") is True:
+                    env_id = item.get("env_id")
+                    if env_id:
+                        env_table = get_db_client().get_table("environment_variable")
+                        env_resp = env_table.get_item(Key={"project_id": project_id, "env_id": env_id})
+                        env_values: dict = env_resp.get("Item", {}).get("environment_values", {})
+                        if env_values:
+                            body_str = str(body)
+                            for key, val in env_values.items():
+                                body_str = body_str.replace(f"{{{key}}}", str(val))
+                            try:
+                                body = ast.literal_eval(body_str)
+                            except Exception:
+                                pass
+
+                return body
 
         raise HTTPException(status_code=404, detail="API not found")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Register for all HTTP methods so the handler — not FastAPI's router — validates the method
+public_router.add_api_route(
+    "/mock-api-response",
+    get_mock_api_response,
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
